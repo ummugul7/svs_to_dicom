@@ -1,10 +1,10 @@
 # SVS to DICOM API
 Tıbbi patoloji görüntülerini (`.svs`) yükleyip, arka planda DICOM formatına dönüştüren bir FastAPI servisidir.
-## 🚀 Özellikler
+##  Özellikler
 - `.svs` yükleme ve arka planda DICOM dönüştürme.
 - OpenSlide ile metadata okuma ve özellik çıkarımı.
 - Önizleme için "thumbnail" ve bölgesel kesit (tile) alma.
-## 📋 Kurulum ve Çalıştırma
+##  Kurulum ve Çalıştırma
 1. Sanal ortam (venv) oluşturun ve aktifleştirin.
 2. Bağımlılıkları yükleyin:
    ```bash
