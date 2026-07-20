@@ -15,7 +15,7 @@ Tıbbi patoloji görüntülerini (`.svs`) yükleyip, arka planda DICOM formatın
    python main.py
    ```
 **Not:** API'yi test etmek için tarayıcıda `http://127.0.0.1:8000/docs` adresini açabilirsiniz (Swagger UI).
-## 📡 Uç Noktalar (Endpoints)
+## Endpoints
 |
  Uç Nokta 
 |
