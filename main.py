@@ -5,8 +5,6 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from src.api import router as api_router
 
-app = FastAPI(title=" WSI & DICOM server")
-
 #program kapanırken oluşan data klasörü silinmesi için
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -18,6 +16,9 @@ async def lifespan(app: FastAPI):
             print(f"[Shutdown] Successfully deleted local '{data_folder}' directory.")
         except Exception as e:
             print(f"[Shutdown] Error deleting directory '{data_folder}': {e}")
+
+
+app = FastAPI( title="WSI & DICOM server", lifespan=lifespan)
 
 # src/routes.py'da yazdığımız tüm endpointleri uygulamaya dahil etme işi
 #başka bir dosyada daha endpointlerimiz olsaydı onu da mainde birleştirmemiz gerekirdi.
