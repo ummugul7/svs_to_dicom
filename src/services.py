@@ -4,13 +4,27 @@ import shutil
 import uuid
 import zipfile  #DICOM dosyasını zipe getirmek için
 import openslide
+from fastapi import UploadFile
 from sqlalchemy.exc import IntegrityError
 from wsidicomizer import WsiDicomizer
 import hashlib
 from sqlalchemy.orm import Session
 from src.model import Slide
+from dotenv import load_dotenv
+import concurrent.futures
+import logging
 
 DATA_FOLDER = "data"
+load_dotenv()
+MAX_THREADS = int(os.getenv("MAX_THREADS"))
+dicom_executor = concurrent.futures.ThreadPoolExecutor(max_workers=MAX_THREADS)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    filename= os.getenv("LOG_FILE_NAME"),
+    filemode='a'
+)
 
 def slide_folder(slide_id: str) -> str:
     return os.path.join(DATA_FOLDER, slide_id)
@@ -22,7 +36,6 @@ def svs_path_get(slide_id: str) -> str:
     for file in os.listdir(folder):
         if file.endswith(".svs"):
             return os.path.join(folder, file)
-    raise FileNotFoundError(f"'{slide_id}' slide not found ")
 
 
 def save_uploaded_file(file_name: str, file_object) -> str:
@@ -31,33 +44,10 @@ def save_uploaded_file(file_name: str, file_object) -> str:
     os.makedirs(folder, exist_ok=True) #localde kalsör oluşturmak için
 
     svs_path = os.path.join(folder, file_name)
+    logging.info(f"[Background] Saving '{file_name}' to '{svs_path}'")
     with open(svs_path, "wb") as buffer:
         shutil.copyfileobj(file_object, buffer)
     return slide_id
-
-
-#seçilen metadataları döndüren endpoit
-def get_metadata(slide_id: str) -> dict:
-    svs_path = svs_path_get(slide_id)
-    slide = openslide.OpenSlide(svs_path)
-    try:
-        width, height = slide.dimensions
-        return {
-            "slide_id": slide_id,
-            "file_name": os.path.basename(svs_path),
-            "original_resolution": f"{width} x {height}",
-            "total_level_count": slide.level_count,
-            "features": {
-                key: value
-                for key, value in slide.properties.items()
-                if any(
-                    k in key
-                    for k in ["magnification", "vendor", "mpp", "objective"]
-                )
-            },
-        }
-    finally:
-        slide.close()
 
 
 #tüm metadataları listeler
@@ -68,7 +58,6 @@ def get_properties(slide_id: str) -> dict:
         return dict(slide.properties)
     finally:
         slide.close()
-
 
 def create_thumbnail(slide_id: str, size=(500, 500)) -> str:
     svs_path = svs_path_get(slide_id)
@@ -82,30 +71,7 @@ def create_thumbnail(slide_id: str, size=(500, 500)) -> str:
     finally:
         slide.close()
 
-
-def create_tile(
-    slide_id: str,
-    level: int = 0,
-    x: int = 5000,
-    y: int = 8000,
-    w: int = 256,
-    h: int = 256,
-) -> str:
-
-    svs_path = svs_path_get(slide_id)
-    folder = slide_folder(slide_id)
-    slide = openslide.OpenSlide(svs_path)
-    try:
-        tile = slide.read_region((x, y), level, (w, h))
-        tile_rgb = tile.convert("RGB")
-        tile_path = os.path.join(folder, f"tile_{level}_{x}_{y}_{w}x{h}.png")
-        tile_rgb.save(tile_path)
-        return tile_path
-    finally:
-        slide.close()
-
-
-def background_dicom_and_zip_process(slide_id: str):
+def dicom_and_zip_process(slide_id: str):
     folder = slide_folder(slide_id)
     try:
         svs_path = svs_path_get(slide_id)
@@ -120,26 +86,61 @@ def background_dicom_and_zip_process(slide_id: str):
 
         WsiDicomizer.convert(filepath=svs_path, output_path=output_folder)
 
+        if not os.path.exists(output_folder) or len(os.listdir(output_folder)) == 0:
+            raise Exception("Dönüşüm hatası: DICOM dosyaları oluşturulamadı.")
 
-        #ilerleyen zamanlarda bizden zipli bir dosya istenmezse bunu sileriz
+        # ZIP İşlemi bunu kullanıcya web üzeirnden indirilebilr bir şekilde iletmek için yaptm
         with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
             for root, _, files in os.walk(output_folder):
                 for file in files:
                     file_path = os.path.join(root, file)
                     zipf.write(file_path, os.path.relpath(file_path, output_folder))
-        #burda zip yaptıktan sonra fazlalı olmasın diye dosyayı siliyoruz
+                    
+        # ZIP yaptıktan sonra fazlalık DICOM klasörünü sil
         if os.path.exists(output_folder):
             shutil.rmtree(output_folder)
 
-        print(f"[Background] Processing complete for '{slide_id}'. ZIP ready.")
+        from src.database import SessionLocal
+        db = SessionLocal()
+        try:
+            add_slide(slide_id, db)
+            #dbye veri kaydedildikten ve dönüşüm işelmi bittikten sonra svs dosyası silindi
+            if os.path.exists(svs_path):
+                os.remove(svs_path)
+                logging.info(f"[Background] Original SVS file deleted to save space: '{slide_id}'.")
+                
+            logging.info(f"[Background] Processing complete and saved to DB for '{slide_id}'. ZIP ready.")
+        except IntegrityError:
+            db.rollback()
+            logging.warning(f"[Background] Integrity error saving '{slide_id}' to DB. Concurrent upload?")
+        finally:
+            db.close()
+
     except Exception as e:
-        print(f"[Background] Error processing '{slide_id}': {str(e)}")
+        logging.error(f"[Background] Error processing '{slide_id}': {str(e)}")
 
 
 
 def zip_path_get(slide_id: str) -> str:
     return os.path.join(slide_folder(slide_id), "dicom_output.zip")
 
+def all_folder_get() -> str:
+    # Eğer data klasörü hiç oluşmamışsa (daha önce dosya yüklenmediyse) oluştur
+    if not os.path.exists(DATA_FOLDER):
+        os.makedirs(DATA_FOLDER, exist_ok=True)
+
+    global_zip_path = os.path.join(DATA_FOLDER, "all_dicom_outputs.zip")
+    
+    # Mevcut tüm ID klasörlerini gez ve içlerindeki zip dosyalarını topla
+    with zipfile.ZipFile(global_zip_path, "w", zipfile.ZIP_DEFLATED) as global_zip:
+        for slide_id in os.listdir(DATA_FOLDER):
+            folder_path = os.path.join(DATA_FOLDER, slide_id)
+            if os.path.isdir(folder_path):
+                slide_zip = os.path.join(folder_path, "dicom_output.zip")
+                if os.path.exists(slide_zip):
+                    global_zip.write(slide_zip, f"{slide_id}_dicom_output.zip")
+                    
+    return global_zip_path
 
 # bu method her dosyaya ait hash değeri döndürüyor
 def generate_metadata_hash(slide_id: str) -> str:
@@ -153,16 +154,14 @@ def generate_metadata_hash(slide_id: str) -> str:
 
         metadata_hash = hashlib.sha256(raw_metadata_string.encode("utf-8")).hexdigest()
         return metadata_hash
-
     finally:
         slide.close()
 
 
 #DB ye veri ekleme methodu
-def add_slide(slide_id: str, db:Session) -> Slide:
+def add_slide(slide_id: str, db:Session) :
     svs_path = svs_path_get(slide_id)
     filename = os.path.basename(svs_path)
-
     slide = openslide.OpenSlide(svs_path)
     try:
         raw_properties = dict(slide.properties)
@@ -178,27 +177,25 @@ def add_slide(slide_id: str, db:Session) -> Slide:
     db.add(new_slide)
     db.commit()
     db.refresh(new_slide)
-    return new_slide  # burada yeni nesneyi döndürüyor da gerek olmayabilir
-
+    logging.info(f"[Background] Added new slide. '{slide_id}'.'") 
 
 #hash değerinin mevcut olup olmadığını kontol ediyoruz
 def check_slide_exists(db: Session, quickhash: str) -> Slide | None:
     return db.query(Slide).filter(Slide.quickhash == quickhash).first()
 
 
-def process_svs_folder(
-    files: list[UploadFile],
-    db: Session
-) -> dict:
+def process_svs_folder( files: list[UploadFile],db: Session) :
     results = {"added": [], "duplicates": [], "skipped": []}
 
     for upload_file in files:
         file_name = os.path.basename(upload_file.filename)
 
         if not file_name.lower().endswith(".svs"):
+            reason = "Not an .svs file, skipped."
+            logging.warning(f"Skipped '{file_name}': {reason}")
             results["skipped"].append({
                 "file_name": file_name,
-                "reason": "Not an .svs file, skipped.",
+                "reason": reason,
             })
             continue
 
@@ -208,15 +205,18 @@ def process_svs_folder(
             metadata_hash = generate_metadata_hash(slide_id)
         except Exception as e:
             shutil.rmtree(slide_folder(slide_id), ignore_errors=True)
+            error_msg = f"Could not open/read the file: {str(e)}"
+            logging.error(f"Error reading '{file_name}': {error_msg}")
             results["skipped"].append({
                 "file_name": file_name,
-                "reason": f"Could not open/read the file: {str(e)}",
+                "reason": error_msg,
             })
             continue
 
         existing = check_slide_exists(db, metadata_hash)
         if existing:
             shutil.rmtree(slide_folder(slide_id), ignore_errors=True)
+            logging.info(f"Duplicate file '{file_name}'. Same hash as '{existing.filename}'.")
             results["duplicates"].append({
                 "file_name": file_name,
                 "error": "This slide already exists in the system (same metadata found under a different name).",
@@ -224,22 +224,14 @@ def process_svs_folder(
             })
             continue
 
-        try:
-            add_slide(slide_id, db)
-        except IntegrityError:
-            db.rollback()
-            shutil.rmtree(slide_folder(slide_id), ignore_errors=True)
-            results["duplicates"].append({
-                "file_name": file_name,
-                "error": "This slide was already added by a concurrent request.",
-            })
-            continue
-        background_dicom_and_zip_process(slide_id)
+        # Görevi otomatik işçi havuzuna teslim ediyoruz
+        dicom_executor.submit(dicom_and_zip_process, slide_id)
 
         results["added"].append({
             "slide_id": slide_id,
             "file_name": file_name,
-            "message": "New slide added, DICOM conversion started in the background.",
+            "message": "New slide accepted, DICOM conversion started in the background.",
         })
 
+    logging.info(f"Folder scan summary -> Added: {len(results['added'])}, Duplicates: {len(results['duplicates'])}, Skipped: {len(results['skipped'])}")
     return results
