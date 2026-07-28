@@ -22,8 +22,6 @@ graph TD
 ```
 
 ## Kurulum ve Çalıştırma
-- Projeyi ayağa kaldırmak için terminalde `python main.py` komutunu çalıştırabilirsiniz.
-- Yükleme testi için ana dizindeki `test_upload.html` dosyasını tarayıcıda açabilirsiniz.
-
-
-NOT: arayüz deneme için oluşturuldu 
+- projenin bulunduğu klaörde docker compose up komutu ile veya ide üzerinden containeri ayağa kaldırın,
+- Projeyi ayağa kaldırmak için terminalde `python main.py` komutunu çalıştırın,
+- Yükleme testi için ana dizindeki `test_upload.html` dosyasını tarayıcıdadan açarak yükleme işlemini gereçekleştirebilirsiniz 
