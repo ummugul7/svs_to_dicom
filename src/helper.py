@@ -1,17 +1,21 @@
-import os
 import hashlib
+import os
 import shutil
-from contextlib import contextmanager
-import openslide
-from sqlalchemy.orm import Session
-from sqlalchemy import select
-from src.model import Slide
 import uuid
+from contextlib import contextmanager
+
+import openslide
+from sqlalchemy import select
+from sqlalchemy.orm import Session # noqa: TC002
+
+from src.model import Slide
 
 DATA_FOLDER = "data"
 
+
 def slide_folder(slide_id: str) -> str:
     return os.path.join(DATA_FOLDER, slide_id)
+
 
 def svs_path_get(slide_id: str) -> str:
     folder = slide_folder(slide_id)
@@ -22,6 +26,7 @@ def svs_path_get(slide_id: str) -> str:
             return os.path.join(folder, file)
     raise FileNotFoundError(f"No .svs file found in '{slide_id}' directory.")
 
+
 @contextmanager
 def open_slide_safe(svs_path: str):
     slide = openslide.OpenSlide(svs_path)
@@ -29,6 +34,7 @@ def open_slide_safe(svs_path: str):
         yield slide
     finally:
         slide.close()
+
 
 def generate_metadata_hash(slide_id: str) -> str:
     svs_path = svs_path_get(slide_id)
@@ -52,15 +58,16 @@ def create_thumbnail(slide_id: str, size=(500, 500)) -> str:
         return thumbnail_path
 
 
-#hash değerinin mevcut olup olmadığını kontol ediyoruz
+# hash değerinin mevcut olup olmadığını kontol ediyoruz
 def check_slide_exists(db: Session, quickhash: str) -> Slide | None:
     stmt = select(Slide).where(Slide.quickhash == quickhash)
     return db.execute(stmt).scalar_one_or_none()
 
+
 def save_uploaded_file(file_name: str, file_object) -> str:
     slide_id = uuid.uuid4().hex
     folder = slide_folder(slide_id)
-    os.makedirs(folder, exist_ok=True) #localde kalsör oluşturmak için
+    os.makedirs(folder, exist_ok=True)  # localde kalsör oluşturmak için
 
     svs_path = os.path.join(folder, file_name)
     with open(svs_path, "wb") as buffer:
