@@ -6,7 +6,7 @@ from contextlib import contextmanager
 
 import openslide
 from sqlalchemy import select
-from sqlalchemy.orm import Session # noqa: TC002
+from sqlalchemy.orm import Session  # noqa: TC002
 
 from src.model import Slide
 
@@ -25,6 +25,17 @@ def svs_path_get(slide_id: str) -> str:
         if file.endswith(".svs"):
             return os.path.join(folder, file)
     raise FileNotFoundError(f"No .svs file found in '{slide_id}' directory.")
+
+
+def save_uploaded_file(file_name: str, file_object) -> str:
+    slide_id = uuid.uuid4().hex
+    folder = slide_folder(slide_id)
+    os.makedirs(folder, exist_ok=True)  # localde kalsör oluşturmak için
+
+    svs_path = os.path.join(folder, file_name)
+    with open(svs_path, "wb") as buffer:
+        shutil.copyfileobj(file_object, buffer)
+    return slide_id
 
 
 @contextmanager
@@ -49,11 +60,12 @@ def generate_metadata_hash(slide_id: str) -> str:
 
 def create_thumbnail(slide_id: str, size=(500, 500)) -> str:
     svs_path = svs_path_get(slide_id)
+    file_name = os.path.basename(svs_path)
     folder = slide_folder(slide_id)
 
     with open_slide_safe(svs_path) as slide:
         thumbnail = slide.get_thumbnail(size)
-        thumbnail_path = os.path.join(folder, "thumbnail.png")
+        thumbnail_path = os.path.join(folder, f"{file_name}_thumbnail.png")
         thumbnail.save(thumbnail_path)
         return thumbnail_path
 
@@ -62,14 +74,3 @@ def create_thumbnail(slide_id: str, size=(500, 500)) -> str:
 def check_slide_exists(db: Session, quickhash: str) -> Slide | None:
     stmt = select(Slide).where(Slide.quickhash == quickhash)
     return db.execute(stmt).scalar_one_or_none()
-
-
-def save_uploaded_file(file_name: str, file_object) -> str:
-    slide_id = uuid.uuid4().hex
-    folder = slide_folder(slide_id)
-    os.makedirs(folder, exist_ok=True)  # localde kalsör oluşturmak için
-
-    svs_path = os.path.join(folder, file_name)
-    with open(svs_path, "wb") as buffer:
-        shutil.copyfileobj(file_object, buffer)
-    return slide_id

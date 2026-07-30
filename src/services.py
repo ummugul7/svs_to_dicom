@@ -4,7 +4,7 @@ import logging
 import os
 import shutil
 from dotenv import load_dotenv
-from fastapi import UploadFile # noqa: TC002
+from fastapi import UploadFile  # noqa: TC002
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session  # noqa: TC002
 from wsidicomizer import WsiDicomizer
@@ -56,20 +56,16 @@ def dicom_process(slide_id: str):
             # dbye veri kaydedildikten ve dönüşüm işelmi bittikten sonra svs dosyası silindi
             if os.path.exists(svs_path):
                 os.remove(svs_path)
-                logging.info(
-                    f"[Background] Original SVS file deleted to save space: '{slide_id}'."
-                )
+                logging.info(f" Original SVS file deleted to save space: '{slide_id}'.")
 
         except IntegrityError:
             db.rollback()
-            logging.warning(
-                f"[Background] Integrity error saving '{slide_id}' to DB. Concurrent upload?"
-            )
+            logging.warning(f" Integrity error saving '{slide_id}' to DB. Concurrent upload?")
         finally:
             db.close()
 
-    except (SQLAlchemyError, OSError, ValueError) as e:
-        logging.error(f"[Background] Error processing '{slide_id}': {e!s}")
+    except Exception as e:  # noqa: BLE001
+        logging.error(f" Error processing '{slide_id}': {e!s}")
 
 
 def add_db(slide_id: str, db: Session):
@@ -80,12 +76,12 @@ def add_db(slide_id: str, db: Session):
         new_slide = Slide(
             quickhash=generate_metadata_hash(slide_id),
             filename=file_name,
-            properties=slide.properties,
+            properties=dict(slide.properties),
         )
         db.add(new_slide)
         db.commit()
         db.refresh(new_slide)
-        logging.info(f"[Background] Added new slide. '{file_name}'.'")
+        logging.info(f" Added new slide. '{file_name}'.'")
 
 
 def process_svs_folder(files: list[UploadFile], db: Session):
@@ -123,9 +119,7 @@ def process_svs_folder(files: list[UploadFile], db: Session):
         existing = check_slide_exists(db, metadata_hash)
         if existing:
             shutil.rmtree(slide_folder(slide_id), ignore_errors=True)
-            logging.info(
-                f"Duplicate file '{file_name}'. Same hash as '{existing.filename}'."
-            )
+            logging.info(f"Duplicate file '{file_name}'. Same hash as '{existing.filename}'.")
             results["duplicates"].append(
                 {
                     "file_name": file_name,
@@ -145,5 +139,7 @@ def process_svs_folder(files: list[UploadFile], db: Session):
             }
         )
 
-    logging.info( f"Folder scan summary -> Added: {len(results['added'])}, Duplicates: {len(results['duplicates'])}, Skipped: {len(results['skipped'])}" )
+    logging.info(
+        f"Folder scan summary -> Added: {len(results['added'])}, Duplicates: {len(results['duplicates'])}, Skipped: {len(results['skipped'])}"
+    )
     return results
