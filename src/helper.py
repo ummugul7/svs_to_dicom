@@ -1,41 +1,36 @@
 import hashlib
 import os
 import shutil
-import uuid
 from contextlib import contextmanager
 
 import openslide
 from sqlalchemy import select
-from sqlalchemy.orm import Session  # noqa: TC002
 
+from src.database import db_session
 from src.model import Slide
 
-DATA_FOLDER = "data"
+DATA_FOLDER = os.getenv("DATA_FOLDER")
 
 
-def slide_folder(slide_id: str) -> str:
-    return os.path.join(DATA_FOLDER, slide_id)
+def svs_path_get(file_name: str) -> str:
+    svs_path = os.path.join(DATA_FOLDER, file_name)
+    if not os.path.isfile(svs_path):
+        raise FileNotFoundError(f"'{file_name}' not found in data folder.")
+    return svs_path
 
 
-def svs_path_get(slide_id: str) -> str:
-    folder = slide_folder(slide_id)
-    if not os.path.isdir(folder):
-        raise FileNotFoundError(f"'{slide_id}' slide not found.")
-    for file in os.listdir(folder):
-        if file.endswith(".svs"):
-            return os.path.join(folder, file)
-    raise FileNotFoundError(f"No .svs file found in '{slide_id}' directory.")
+def dicom_folder_get(file_name: str) -> str:
+    base_name = os.path.splitext(file_name)[0]
+    return os.path.join(DATA_FOLDER, f"{base_name}_dicom")
 
 
 def save_uploaded_file(file_name: str, file_object) -> str:
-    slide_id = uuid.uuid4().hex
-    folder = slide_folder(slide_id)
-    os.makedirs(folder, exist_ok=True)  # localde kalsör oluşturmak için
+    os.makedirs(DATA_FOLDER, exist_ok=True)
 
-    svs_path = os.path.join(folder, file_name)
+    svs_path = os.path.join(DATA_FOLDER, file_name)
     with open(svs_path, "wb") as buffer:
         shutil.copyfileobj(file_object, buffer)
-    return slide_id
+    return file_name
 
 
 @contextmanager
@@ -47,8 +42,8 @@ def open_slide_safe(svs_path: str):
         slide.close()
 
 
-def generate_metadata_hash(slide_id: str) -> str:
-    svs_path = svs_path_get(slide_id)
+def generate_metadata_hash(file_name: str) -> str:
+    svs_path = svs_path_get(file_name)
 
     with open_slide_safe(svs_path) as slide:
         file_size = os.path.getsize(svs_path)
@@ -58,19 +53,17 @@ def generate_metadata_hash(slide_id: str) -> str:
         return hashlib.sha256(raw_metadata_string.encode("utf-8")).hexdigest()
 
 
-def create_thumbnail(slide_id: str, size=(500, 500)) -> str:
-    svs_path = svs_path_get(slide_id)
-    file_name = os.path.basename(svs_path)
-    folder = slide_folder(slide_id)
+def create_thumbnail(file_name: str, size=(500, 500)) -> str:
+    svs_path = svs_path_get(file_name)
 
     with open_slide_safe(svs_path) as slide:
         thumbnail = slide.get_thumbnail(size)
-        thumbnail_path = os.path.join(folder, f"{file_name}_thumbnail.png")
+        thumbnail_path = os.path.join(DATA_FOLDER, f"{file_name}_thumbnail.png")
         thumbnail.save(thumbnail_path)
         return thumbnail_path
 
 
 # hash değerinin mevcut olup olmadığını kontol ediyoruz
-def check_slide_exists(db: Session, quickhash: str) -> Slide | None:
+def check_slide_exists(quickhash: str) -> Slide | None:
     stmt = select(Slide).where(Slide.quickhash == quickhash)
-    return db.execute(stmt).scalar_one_or_none()
+    return db_session.execute(stmt).scalar_one_or_none()

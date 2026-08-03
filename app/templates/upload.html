@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PatoScan — Slayt Yükleme</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+<main class="page">
+
+  <section class="hero">
+    <h1 class="font-display"> SVS TO DİCOM</h1>
+  </section>
+
+  <section class="upload-card">
+    <form id="uploadForm" method="POST" action="/upload" enctype="multipart/form-data">
+      <div class="dropzone" id="dropzone">
+        <span class="reticle-bl"></span>
+        <span class="reticle-br"></span>
+
+        <svg class="dropzone__icon" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M20 6v18M20 6l-6 6M20 6l6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M8 26v4a2 2 0 0 0 2 2h20a2 2 0 0 0 2-2v-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+
+        <p class="dropzone__title">Klasör seçin </p>
+        <p class="dropzone__filename" id="fileNameDisplay"></p>
+
+        <div class="dropzone__actions">
+          <label class="btn btn-secondary" for="fileInput">
+            Dosyaları Seç
+          </label>
+          <input class="file-input" type="file" id="fileInput" name="svs_files" webkitdirectory multiple required>
+          <button type="submit" class="btn btn-primary">Yükle</button>
+        </div>
+
+        <div class="progress" id="progress">
+          <div class="progress__bar"></div>
+        </div>
+      </div>
+    </form>
+  </section>
+
+  {% if result %}
+  <section class="results">
+
+    {% if result.added %}
+    <div class="result-card result-card--added">
+      <div class="result-card__head">
+        <svg class="result-card__icon" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="10" cy="10" r="8.5" stroke="currentColor" stroke-width="1.6"/>
+          <path d="M6.5 10.2l2.3 2.3 4.7-5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span class="result-card__title">Eklenen</span>
+        <span class="result-card__count">{{ result.added|length }}</span>
+      </div>
+      <ul class="result-list">
+        {% for item in result.added %}
+        <li>
+          <button type="button" class="result-row result-row--clickable"
+            data-name="{{ item.file_name }}" data-status="added">
+            <span class="result-row__mark">＋</span>
+            <span class="result-row__name">{{ item.file_name }}</span>
+            <svg class="result-row__chevron" viewBox="0 0 20 20" fill="none"><path d="M7.5 4.5l6 5.5-6 5.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    {% if result.duplicates %}
+    <div class="result-card result-card--duplicates">
+      <div class="result-card__head">
+        <svg class="result-card__icon" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M10 2.5l8 15h-16l8-15z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+          <line x1="10" y1="8.2" x2="10" y2="11.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+          <circle cx="10" cy="14.3" r="0.9" fill="currentColor"/>
+        </svg>
+        <span class="result-card__title">Tekrarlanan</span>
+        <span class="result-card__count">{{ result.duplicates|length }}</span>
+      </div>
+      <ul class="result-list">
+        {% for item in result.duplicates %}
+        <li>
+          <button type="button" class="result-row result-row--clickable"
+            data-name="{{ item.file_name }}" data-status="duplicate" data-match="{{ item.match_name | default('Bilinmiyor') }}">
+            <span class="result-row__mark">＋</span>
+            <span class="result-row__name">{{ item.file_name }}</span>
+            <svg class="result-row__chevron" viewBox="0 0 20 20" fill="none"><path d="M7.5 4.5l6 5.5-6 5.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    {% if result.skipped %}
+    <div class="result-card result-card--skipped">
+      <div class="result-card__head">
+        <svg class="result-card__icon" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="10" cy="10" r="8.5" stroke="currentColor" stroke-width="1.6"/>
+          <line x1="7" y1="7" x2="13" y2="13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+          <line x1="13" y1="7" x2="7" y2="13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+        </svg>
+        <span class="result-card__title">Atlanan</span>
+        <span class="result-card__count">{{ result.skipped|length }}</span>
+      </div>
+      <ul class="result-list">
+        {% for item in result.skipped %}
+        <li>
+          <div class="result-row result-row--disabled result-row--skipped">
+            <span class="result-row__mark">✕</span>
+            <span class="result-row__name">{{ item.file_name }}</span>
+          </div>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+  </section>
+  {% endif %}
+</main>
+
+<div class="overlay" id="overlay"></div>
+
+<aside class="drawer" id="drawer" aria-hidden="true">
+  <div class="drawer__head">
+    <p class="drawer__eyebrow">Dosya Detayı</p>
+    <div class="drawer__title-row">
+      <span class="drawer__filename" id="drawerFilename">—</span>
+      <button class="drawer__close" id="drawerClose" aria-label="Kapat">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M1 1l12 12M13 1L1 13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <span class="drawer__status" id="drawerStatus"></span>
+  </div>
+
+  <div class="drawer__body">
+    <ul class="meta-list">
+      <li class="meta-row">
+        <span class="meta-row__label">Sisteme yükleme tarihi</span>
+        <span class="meta-row__value" id="metaDate">—</span>
+      </li>
+      <li class="meta-row">
+        <span class="meta-row__label">Tarama tarihi</span>
+        <span class="meta-row__value" id="metaScanDate">—</span>
+      </li>
+      <li class="meta-row">
+        <span class="meta-row__label">Çözünürlük</span>
+        <span class="meta-row__value" id="metaDim">—</span>
+      </li>
+      <li class="meta-row">
+        <span class="meta-row__label">Cihaz (Vendor)</span>
+        <span class="meta-row__value" id="metaVendor">—</span>
+      </li>
+      <li class="meta-row">
+        <span class="meta-row__label">Büyütme (Mag)</span>
+        <span class="meta-row__value" id="metaMag">—</span>
+      </li>
+      <li class="meta-row">
+        <span class="meta-row__label">Seviye Sayısı (Level Count)</span>
+        <span class="meta-row__value" id="metaLevelCount">—</span>
+      </li>
+      <li class="meta-row">
+        <span class="meta-row__label">MPP (Mikron/Piksel)</span>
+        <span class="meta-row__value" id="metaMpp">—</span>
+      </li>
+       <li class="meta-row">
+        <span class="meta-row__label">width</span>
+        <span class="meta-row__value" id="width">—</span>
+      </li>
+       <li class="meta-row">
+        <span class="meta-row__label">height</span>
+        <span class="meta-row__value" id="height">—</span>
+      </li>
+    </ul>
+
+    <div class="meta-note" id="metaNote">
+      Bu dosya, sistemde kayıtlı <strong id="metaMatch"></strong> ile aynı meta veriye sahip olduğu için tekrarlanan olarak işaretlendi.
+    </div>
+  </div>
+
+
+</aside>
+
+<script src="{{ url_for('static', filename='js/upload.js') }}"></script>
+</body>
+</html>

@@ -1,35 +1,19 @@
-from contextlib import asynccontextmanager
+import atexit
 
-import uvicorn
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-
-from src.api import router as api_router
+from app.views import app
 from src.database import Base, engine
 from src.services import dicom_executor
 
 Base.metadata.create_all(bind=engine)
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    yield
+def shutdown_executor():
     dicom_executor.shutdown(wait=False)
 
 
-app = FastAPI(title="WSI & DICOM server", lifespan=lifespan)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# src/routes.py'da yazdığımız tüm endpointleri uygulamaya dahil etmek için
-# başka bir dosyada daha endpointlerimiz olsaydı onu da mainde birleştirmemiz gerekirdi.
-app.include_router(api_router)
+# Register the shutdown hook to clean up threads when Flask exits
+atexit.register(shutdown_executor)
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
+    # Start the Flask development server on port 8000 (port 5000 is often blocked by macOS AirPlay)
+    app.run(host="127.0.0.1", port=8000, debug=True)

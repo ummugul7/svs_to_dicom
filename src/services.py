@@ -4,19 +4,18 @@ import logging
 import os
 import shutil
 from dotenv import load_dotenv
-from fastapi import UploadFile  # noqa: TC002
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
-from sqlalchemy.orm import Session  # noqa: TC002
+from src.database import db_session
 from wsidicomizer import WsiDicomizer
 
 from src.helper import (
     check_slide_exists,
-    create_thumbnail,
     generate_metadata_hash,
     open_slide_safe,
     save_uploaded_file,
-    slide_folder,
     svs_path_get,
+    dicom_folder_get,
+    DATA_FOLDER,
 )
 from src.model import Slide
 
@@ -32,13 +31,10 @@ logging.basicConfig(
 )
 
 
-def dicom_process(slide_id: str):
-    folder = slide_folder(slide_id)
+def dicom_process(file_name: str):
     try:
-        svs_path = svs_path_get(slide_id)
-        file_name = os.path.basename(svs_path)
-        output_folder = os.path.join(folder, f"{file_name}_dicom")
-        create_thumbnail(slide_id, size=(500, 500))
+        svs_path = svs_path_get(file_name)
+        output_folder = dicom_folder_get(file_name)
 
         if os.path.exists(output_folder):
             shutil.rmtree(output_folder)
@@ -48,43 +44,34 @@ def dicom_process(slide_id: str):
         if not os.path.exists(output_folder) or len(os.listdir(output_folder)) == 0:
             raise Exception("DICOM files could not be created.")
 
-        from src.database import SessionLocal
-
-        db = SessionLocal()
         try:
-            add_db(slide_id, db)
-            # dbye veri kaydedildikten ve dönüşüm işelmi bittikten sonra svs dosyası silindi
             if os.path.exists(svs_path):
                 os.remove(svs_path)
-                logging.info(f" Original SVS file deleted to save space: '{slide_id}'.")
+                logging.info(f" Original SVS file deleted to save space: '{file_name}'.")
 
-        except IntegrityError:
-            db.rollback()
-            logging.warning(f" Integrity error saving '{slide_id}' to DB. Concurrent upload?")
-        finally:
-            db.close()
+        except Exception as ex:  # noqa: BLE001
+            logging.warning(f" Error deleting original file '{file_name}': {ex!s}")
 
     except Exception as e:  # noqa: BLE001
-        logging.error(f" Error processing '{slide_id}': {e!s}")
+        logging.error(f" Error processing '{file_name}': {e!s}")
 
 
-def add_db(slide_id: str, db: Session):
-    svs_path = svs_path_get(slide_id)
-    file_name = os.path.basename(svs_path)
+def add_db(file_name: str):
+    svs_path = svs_path_get(file_name)
 
     with open_slide_safe(svs_path) as slide:
         new_slide = Slide(
-            quickhash=generate_metadata_hash(slide_id),
+            quickhash=generate_metadata_hash(file_name),
             filename=file_name,
             properties=dict(slide.properties),
         )
-        db.add(new_slide)
-        db.commit()
-        db.refresh(new_slide)
+        db_session.add(new_slide)
+        db_session.commit()
+        db_session.refresh(new_slide)
         logging.info(f" Added new slide. '{file_name}'.'")
 
 
-def process_svs_folder(files: list[UploadFile], db: Session):
+def process_svs_folder(files):
     results = {"added": [], "duplicates": [], "skipped": []}
 
     for upload_file in files:
@@ -92,54 +79,57 @@ def process_svs_folder(files: list[UploadFile], db: Session):
 
         if not file_name.lower().endswith(".svs"):
             logging.warning(f"Skipped '{file_name}': Not an .svs file, skipped")
-            results["skipped"].append(
-                {
-                    "file_name": file_name,
-                    "reason": "Not an .svs file, skipped",
-                }
-            )
+            results["skipped"].append({"file_name": file_name})
             continue
 
-        slide_id = save_uploaded_file(file_name, upload_file.file)
+        file_name = save_uploaded_file(file_name, upload_file.stream)
 
         try:
-            metadata_hash = generate_metadata_hash(slide_id)
+            metadata_hash = generate_metadata_hash(file_name)
         except (SQLAlchemyError, OSError, ValueError) as e:
-            shutil.rmtree(slide_folder(slide_id), ignore_errors=True)
-            error_msg = f"Could not open/read the file: {e!s}"
-            logging.error(f"Error reading '{file_name}': {error_msg}")
+            svs_path = os.path.join(DATA_FOLDER, file_name)
+            if os.path.exists(svs_path):
+                os.remove(svs_path)
+
+            logging.error(f"Error reading '{file_name}': could not open/read the file '{e}'")
             results["skipped"].append(
                 {
                     "file_name": file_name,
-                    "reason": error_msg,
                 }
             )
             continue
 
-        existing = check_slide_exists(db, metadata_hash)
+        existing = check_slide_exists(metadata_hash)
         if existing:
-            shutil.rmtree(slide_folder(slide_id), ignore_errors=True)
+            svs_path = os.path.join(DATA_FOLDER, file_name)
+            if os.path.exists(svs_path):
+                os.remove(svs_path)
             logging.info(f"Duplicate file '{file_name}'. Same hash as '{existing.filename}'.")
-            results["duplicates"].append(
-                {
-                    "file_name": file_name,
-                    "error": "This slide already exists in the system (same metadata found under a different name).",
-                    "existing_filename": existing.filename,
-                }
-            )
+            results["duplicates"].append({"file_name": file_name, "match_name": existing.filename})
             continue
 
-        dicom_executor.submit(dicom_process, slide_id)
+        try:
+            add_db(file_name)
+        except IntegrityError:
+            db_session.rollback()
+            logging.warning(f" Integrity error saving '{file_name}' to DB.")
 
-        results["added"].append(
-            {
-                "slide_id": slide_id,
-                "file_name": file_name,
-                "message": "New slide accepted, DICOM conversion started in the background.",
-            }
-        )
+        dicom_executor.submit(dicom_process, file_name)
+
+        results["added"].append({"file_name": file_name})
 
     logging.info(
         f"Folder scan summary -> Added: {len(results['added'])}, Duplicates: {len(results['duplicates'])}, Skipped: {len(results['skipped'])}"
     )
     return results
+
+
+def get_slide_details_from_db(file_name: str):
+    slide = Slide.query.filter(Slide.filename == file_name).first()
+    if not slide:
+        return None
+    return {
+        "filename": slide.filename,
+        "date": slide.created_at.strftime("%d.%m.%Y %H:%M") if slide.created_at else "unknown",
+        "properties": slide.properties or {},
+    }

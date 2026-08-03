@@ -5,7 +5,7 @@ postgresql veritabanı, loglama işlemi ve dbnin kullanılması için bir docker
 
 ## Kütüphaneler 
 ORM için SQLAlchemy
-API servisi için FastAPI
+API servisi için flask
 svs dosyalarını okumak için OpenSlide
 svs dosyasını dicoma çevirmek için  WsiDicomizer
 thread yönetiminin otomatik yapılması için  concurrent.futures
