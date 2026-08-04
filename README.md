@@ -23,5 +23,4 @@ graph TD
 
 ## Kurulum ve Çalıştırma
 - projenin bulunduğu klaörde docker compose up komutu ile veya ide üzerinden containeri ayağa kaldırın,
-- Projeyi ayağa kaldırmak için terminalde `python main.py` komutunu çalıştırın,
-- Yükleme testi için ana dizindeki `test_upload.html` dosyasını tarayıcıdadan açarak yükleme işlemini gereçekleştirebilirsiniz 
+- Projeyi ayağa kaldırmak için terminalde `python main.py` komutunu çalıştırın ve http://127.0.0.1:8000/upload ile dosya yükleme işlemine başlayın.
