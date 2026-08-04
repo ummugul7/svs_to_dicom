@@ -4,20 +4,20 @@ import logging
 import os
 import shutil
 from dotenv import load_dotenv
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError
-from src.database import db_session
+from sqlalchemy.exc import SQLAlchemyError
 from wsidicomizer import WsiDicomizer
+from src.model import Slide
 
 from src.helper import (
     check_slide_exists,
     generate_metadata_hash,
-    open_slide_safe,
     save_uploaded_file,
     svs_path_get,
     dicom_folder_get,
-    DATA_FOLDER,
+    delete_svs_folder,
+    read_slide,
+    add_slide_db,
 )
-from src.model import Slide
 
 load_dotenv()
 MAX_THREADS = int(os.getenv("MAX_THREADS"))
@@ -29,6 +29,10 @@ logging.basicConfig(
     filename=os.getenv("LOG_FILE_NAME"),
     filemode="a",
 )
+
+
+log = logging.getLogger("werkzeug")
+log.setLevel(logging.ERROR)
 
 
 def dicom_process(file_name: str):
@@ -45,9 +49,8 @@ def dicom_process(file_name: str):
             raise Exception("DICOM files could not be created.")
 
         try:
-            if os.path.exists(svs_path):
-                os.remove(svs_path)
-                logging.info(f" Original SVS file deleted to save space: '{file_name}'.")
+            delete_svs_folder(file_name)
+            logging.info(f" Original SVS file deleted to save space: '{file_name}'.")
 
         except Exception as ex:  # noqa: BLE001
             logging.warning(f" Error deleting original file '{file_name}': {ex!s}")
@@ -56,19 +59,14 @@ def dicom_process(file_name: str):
         logging.error(f" Error processing '{file_name}': {e!s}")
 
 
-def add_db(file_name: str):
-    svs_path = svs_path_get(file_name)
-
-    with open_slide_safe(svs_path) as slide:
-        new_slide = Slide(
-            quickhash=generate_metadata_hash(file_name),
-            filename=file_name,
-            properties=dict(slide.properties),
-        )
-        db_session.add(new_slide)
-        db_session.commit()
-        db_session.refresh(new_slide)
-        logging.info(f" Added new slide. '{file_name}'.'")
+def add_db(file_name: str, quickhash: str) -> bool:
+    slide = read_slide(file_name, quickhash)
+    success = add_slide_db(slide)
+    if success:
+        logging.info(f"Added new slide. '{file_name}'.")
+    else:
+        logging.warning(f"Integrity error saving '{file_name}' to DB.")
+    return success
 
 
 def process_svs_folder(files):
@@ -87,9 +85,7 @@ def process_svs_folder(files):
         try:
             metadata_hash = generate_metadata_hash(file_name)
         except (SQLAlchemyError, OSError, ValueError) as e:
-            svs_path = os.path.join(DATA_FOLDER, file_name)
-            if os.path.exists(svs_path):
-                os.remove(svs_path)
+            delete_svs_folder(file_name)
 
             logging.error(f"Error reading '{file_name}': could not open/read the file '{e}'")
             results["skipped"].append(
@@ -101,22 +97,17 @@ def process_svs_folder(files):
 
         existing = check_slide_exists(metadata_hash)
         if existing:
-            svs_path = os.path.join(DATA_FOLDER, file_name)
-            if os.path.exists(svs_path):
-                os.remove(svs_path)
+            delete_svs_folder(file_name)
             logging.info(f"Duplicate file '{file_name}'. Same hash as '{existing.filename}'.")
             results["duplicates"].append({"file_name": file_name, "match_name": existing.filename})
             continue
 
         try:
-            add_db(file_name)
-        except IntegrityError:
-            db_session.rollback()
-            logging.warning(f" Integrity error saving '{file_name}' to DB.")
-
-        dicom_executor.submit(dicom_process, file_name)
-
-        results["added"].append({"file_name": file_name})
+            dicom_executor.submit(dicom_process, file_name)
+            add_db(file_name, metadata_hash)
+            results["added"].append({"file_name": file_name})
+        except Exception as e:  # noqa: BLE001
+            logging.error(f"Unexpected error processing '{file_name}': {e}")
 
     logging.info(
         f"Folder scan summary -> Added: {len(results['added'])}, Duplicates: {len(results['duplicates'])}, Skipped: {len(results['skipped'])}"

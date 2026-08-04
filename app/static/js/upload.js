@@ -5,14 +5,14 @@ const progress = document.getElementById('progress');
 
 fileInput.addEventListener('change', () => {
   const count = fileInput.files.length;
-  fileNameDisplay.textContent = count > 0 ? `${count} dosya seçildi` : '';
+  fileNameDisplay.textContent = count > 0 ? `${count} files selected` : '';
 });
 
 // bu method formu flaska gönderiyor.
 uploadForm.addEventListener('submit', (e) => {
   if (fileInput.files.length === 0) {
     e.preventDefault();
-    alert("Lütfen yüklemek için en az bir dosya seçin.");
+    alert("Please select at least one file to upload.");
     return;
   }
   progress.classList.add('is-active');
@@ -54,7 +54,7 @@ document.querySelectorAll('.result-row--clickable').forEach(row => {
         
         document.getElementById('drawerFilename').textContent = name;
         document.getElementById('drawerStatus').className = `drawer__status drawer__status--${isAdded ? 'added' : 'duplicate'}`;
-        document.getElementById('drawerStatus').textContent = isAdded ? 'Eklendi' : 'Tekrarlanan';
+        document.getElementById('drawerStatus').textContent = isAdded ? 'Added' : 'Duplicate';
         document.getElementById('metaNote').classList.toggle('is-visible', !isAdded);
         if (!isAdded) document.getElementById('metaMatch').textContent = match;
 
@@ -62,7 +62,7 @@ document.querySelectorAll('.result-row--clickable').forEach(row => {
         toggleDrawer(true);
 
         try {
-            const fetchName = (!isAdded && match !== 'Bilinmiyor' && match) ? match : name;
+            const fetchName = (!isAdded && match !== 'Unknown' && match) ? match : name;
             const res = await fetch(`/slide-details/${encodeURIComponent(fetchName)}`);
             if (!res.ok) throw new Error();
             
@@ -73,22 +73,22 @@ document.querySelectorAll('.result-row--clickable').forEach(row => {
             const mppX = parseFloat(p['openslide.mpp-x']), mppY = parseFloat(p['openslide.mpp-y']);
             const mag = p['openslide.objective-power'] || p['aperio.AppMag'];
 
-            els.date.textContent = date || "Bilinmiyor";
-            els.dim.textContent = (w && h) ? `${w} × ${h} px` : "Bilinmiyor";
-            els.width.textContent = p['openslide.level[0].width'] || "Bilinmiyor";
-            els.height.textContent = p['openslide.level[0].height'] || "Bilinmiyor";
-            els.scanDate.textContent = p['aperio.Date'] || p['tiff.DateTime'] || "Bilinmiyor";
-            els.vendor.textContent = p['openslide.vendor'] || "Bilinmiyor";
-            els.mag.textContent = mag ? `${mag}x` : "Bilinmiyor";
-            els.levelCount.textContent = p['openslide.level-count'] || "Bilinmiyor";
+            els.date.textContent = date || "Unknown";
+            els.dim.textContent = (w && h) ? `${w} × ${h} px` : "Unknown";
+            els.width.textContent = p['openslide.level[0].width'] || "Unknown";
+            els.height.textContent = p['openslide.level[0].height'] || "Unknown";
+            els.scanDate.textContent = p['aperio.Date'] || p['tiff.DateTime'] || "Unknown";
+            els.vendor.textContent = p['openslide.vendor'] || "Unknown";
+            els.mag.textContent = mag ? `${mag}x` : "Unknown";
+            els.levelCount.textContent = p['openslide.level-count'] || "Unknown";
 
             
             els.mpp.textContent = (mppX && mppY) 
                 ? (mppX === mppY ? `${mppX.toFixed(4)} µm/px` : `${mppX.toFixed(4)} x ${mppY.toFixed(4)} µm/px`) 
-                : "Bilinmiyor";
+                : "Unknown";
 
         } catch {
-            Object.values(els).forEach(el => el.textContent = "Bulunamadı");
+            Object.values(els).forEach(el => el.textContent = "Not Found");
         }
     });
 });

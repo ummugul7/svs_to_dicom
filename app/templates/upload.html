@@ -3,14 +3,16 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PatoScan — Slayt Yükleme</title>
+<title>PatoScan — Upload Slide</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-
+<nav style="display: flex; justify-content: flex-start; padding: 1.5rem 2rem; position: absolute; top: 0; left: 0; width: 100%; box-sizing: border-box; z-index: 10;">
+  <a href="/admin" class="btn btn-secondary" style="text-decoration: none;">Admin Panel</a>
+</nav>
 <main class="page">
 
   <section class="hero">
@@ -28,15 +30,15 @@
           <path d="M8 26v4a2 2 0 0 0 2 2h20a2 2 0 0 0 2-2v-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
 
-        <p class="dropzone__title">Klasör seçin </p>
+        <p class="dropzone__title">Select Folder </p>
         <p class="dropzone__filename" id="fileNameDisplay"></p>
 
         <div class="dropzone__actions">
           <label class="btn btn-secondary" for="fileInput">
-            Dosyaları Seç
+            Select Files
           </label>
           <input class="file-input" type="file" id="fileInput" name="svs_files" webkitdirectory multiple required>
-          <button type="submit" class="btn btn-primary">Yükle</button>
+          <button type="submit" class="btn btn-primary">Upload</button>
         </div>
 
         <div class="progress" id="progress">
@@ -56,7 +58,7 @@
           <circle cx="10" cy="10" r="8.5" stroke="currentColor" stroke-width="1.6"/>
           <path d="M6.5 10.2l2.3 2.3 4.7-5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
-        <span class="result-card__title">Eklenen</span>
+        <span class="result-card__title">Added</span>
         <span class="result-card__count">{{ result.added|length }}</span>
       </div>
       <ul class="result-list">
@@ -82,14 +84,14 @@
           <line x1="10" y1="8.2" x2="10" y2="11.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
           <circle cx="10" cy="14.3" r="0.9" fill="currentColor"/>
         </svg>
-        <span class="result-card__title">Tekrarlanan</span>
+        <span class="result-card__title">Duplicates</span>
         <span class="result-card__count">{{ result.duplicates|length }}</span>
       </div>
       <ul class="result-list">
         {% for item in result.duplicates %}
         <li>
           <button type="button" class="result-row result-row--clickable"
-            data-name="{{ item.file_name }}" data-status="duplicate" data-match="{{ item.match_name | default('Bilinmiyor') }}">
+            data-name="{{ item.file_name }}" data-status="duplicate" data-match="{{ item.match_name | default('Unknown') }}">
             <span class="result-row__mark">＋</span>
             <span class="result-row__name">{{ item.file_name }}</span>
             <svg class="result-row__chevron" viewBox="0 0 20 20" fill="none"><path d="M7.5 4.5l6 5.5-6 5.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -108,7 +110,7 @@
           <line x1="7" y1="7" x2="13" y2="13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
           <line x1="13" y1="7" x2="7" y2="13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
         </svg>
-        <span class="result-card__title">Atlanan</span>
+        <span class="result-card__title">Skipped</span>
         <span class="result-card__count">{{ result.skipped|length }}</span>
       </div>
       <ul class="result-list">
@@ -132,10 +134,10 @@
 
 <aside class="drawer" id="drawer" aria-hidden="true">
   <div class="drawer__head">
-    <p class="drawer__eyebrow">Dosya Detayı</p>
+    <p class="drawer__eyebrow">File Details</p>
     <div class="drawer__title-row">
       <span class="drawer__filename" id="drawerFilename">—</span>
-      <button class="drawer__close" id="drawerClose" aria-label="Kapat">
+      <button class="drawer__close" id="drawerClose" aria-label="Close">
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M1 1l12 12M13 1L1 13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
       </button>
     </div>
@@ -145,27 +147,27 @@
   <div class="drawer__body">
     <ul class="meta-list">
       <li class="meta-row">
-        <span class="meta-row__label">Sisteme yükleme tarihi</span>
+        <span class="meta-row__label">Upload Date</span>
         <span class="meta-row__value" id="metaDate">—</span>
       </li>
       <li class="meta-row">
-        <span class="meta-row__label">Tarama tarihi</span>
+        <span class="meta-row__label">Scan Date</span>
         <span class="meta-row__value" id="metaScanDate">—</span>
       </li>
       <li class="meta-row">
-        <span class="meta-row__label">Çözünürlük</span>
+        <span class="meta-row__label">Dimensions</span>
         <span class="meta-row__value" id="metaDim">—</span>
       </li>
       <li class="meta-row">
-        <span class="meta-row__label">Cihaz (Vendor)</span>
+        <span class="meta-row__label">Vendor</span>
         <span class="meta-row__value" id="metaVendor">—</span>
       </li>
       <li class="meta-row">
-        <span class="meta-row__label">Büyütme (Mag)</span>
+        <span class="meta-row__label">Magnification</span>
         <span class="meta-row__value" id="metaMag">—</span>
       </li>
       <li class="meta-row">
-        <span class="meta-row__label">Seviye Sayısı (Level Count)</span>
+        <span class="meta-row__label">Level Count</span>
         <span class="meta-row__value" id="metaLevelCount">—</span>
       </li>
       <li class="meta-row">
@@ -183,7 +185,7 @@
     </ul>
 
     <div class="meta-note" id="metaNote">
-      Bu dosya, sistemde kayıtlı <strong id="metaMatch"></strong> ile aynı meta veriye sahip olduğu için tekrarlanan olarak işaretlendi.
+      This file was marked as a duplicate because it has the same metadata as <strong id="metaMatch"></strong>.
     </div>
   </div>
 
