@@ -13,8 +13,8 @@ from src.model import Slide
 from src.config import get_config_value
 
 
-def svs_path_get(file_name: str) -> str:
-    data_folder = get_config_value("DATA_FOLDER")
+def svs_path_get(file_name: str, root_folder: str = "DATA_FOLDER") -> str:
+    data_folder = get_config_value(root_folder)
     svs_path = os.path.join(data_folder, file_name)
     if not os.path.isfile(svs_path):
         raise FileNotFoundError(f"'{file_name}' not found in data folder.")
@@ -24,6 +24,8 @@ def svs_path_get(file_name: str) -> str:
 def dicom_folder_get(file_name: str) -> str:
     base_name = os.path.splitext(file_name)[0]
     data_folder = get_config_value("DATA_FOLDER")
+
+    os.makedirs(data_folder, exist_ok=True)
     return os.path.join(data_folder, f"{base_name}_dicom")
 
 
@@ -46,8 +48,8 @@ def open_slide_safe(svs_path: str):
         slide.close()
 
 
-def generate_metadata_hash(file_name: str) -> str:
-    svs_path = svs_path_get(file_name)
+def generate_metadata_hash(file_name: str, root_folder: str = "DATA_FOLDER") -> str:
+    svs_path = svs_path_get(file_name, root_folder)
 
     with open_slide_safe(svs_path) as slide:
         file_size = os.path.getsize(svs_path)
@@ -63,15 +65,18 @@ def check_slide_exists(quickhash: str) -> Slide | None:
     return db_session.execute(stmt).scalar_one_or_none()
 
 
-def delete_svs_folder(file_name: str) -> str:
-    data_folder = get_config_value("DATA_FOLDER")
-    svs_path = os.path.join(data_folder, file_name)
+def delete_svs_folder(file_name: str, root_folder: str = "DATA_FOLDER") -> None:
+    if root_folder != "DATA_FOLDER":
+        return
+
+    folder_path = get_config_value(root_folder)
+    svs_path = os.path.join(folder_path, file_name)
     if os.path.exists(svs_path):
         os.remove(svs_path)
 
 
-def read_slide(file_name: str, quickhash: str) -> Slide:
-    svs_path = svs_path_get(file_name)
+def read_slide(file_name: str, quickhash: str, root_folder: str = "DATA_FOLDER") -> Slide:
+    svs_path = svs_path_get(file_name, root_folder)
     with open_slide_safe(svs_path) as slide:
         return Slide(quickhash=quickhash, filename=file_name, properties=dict(slide.properties))
 

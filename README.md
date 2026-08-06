@@ -11,15 +11,6 @@ svs dosyasını dicoma çevirmek için  WsiDicomizer
 thread yönetiminin otomatik yapılması için  concurrent.futures
 db için de psycopg2 
 
-```mermaid
-graph TD
-    A[klasör yüklencek] --> B[sırayla doysalar tarancak]
-    B --> C[.svs uzantısında sahip olanlar uniq bir slide_id değeri ile kaydedilecek]
-    C --> D[dosyaya ait bir hash değeri üretilecek]
-    D --> E[hash değeri dbdeki değerler ile karşılaştırılacak]
-    E --> F[değer yoksa dosya DİCOM fotmatına kaydedilip dbye bilgiler eklenecek  ]
-    F --> G[tüm dosya taranınca işlem bitercek]
-```
 
 ## Kurulum ve Çalıştırma
 - projenin bulunduğu klaörde docker compose up komutu ile veya ide üzerinden containeri ayağa kaldırın,

@@ -1,6 +1,5 @@
 import os
 import time
-import shutil
 import logging
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
@@ -18,23 +17,16 @@ logging.basicConfig(
 
 def handle_new_svs_file(new_svs_file):
     file_name = os.path.basename(new_svs_file)
-    data_folder = get_config_value("DATA_FOLDER")
+    logging.info(f"'{file_name}' new file is processing ")
 
-    os.makedirs(data_folder, exist_ok=True)
-    target_filepath = os.path.join(data_folder, file_name)
-
-    if new_svs_file != target_filepath:
-        shutil.copy2(new_svs_file, target_filepath)
-
-    logging.info(f"'{file_name}' işleme alınıyor...")
-    process_files([file_name])
+    process_files([file_name], root_folder="WATCH_FOLDER")
 
 
 class SvsFolderHandler(FileSystemEventHandler):
     def on_created(self, event):
         if not event.is_directory and event.src_path.lower().endswith(".svs"):
-            logging.info(f"\n[YENİ DOSYA YAKALANDI] -> {event.src_path}")
-            time.sleep(3)
+            logging.info(f"\n[NEW FİLE] -> {event.src_path}")
+            time.sleep(1)
             handle_new_svs_file(event.src_path)
 
 
@@ -45,7 +37,6 @@ def start_observer():
         return
 
     os.makedirs(watch_folder, exist_ok=True)
-
     observer = Observer()
     event_handler = SvsFolderHandler()
     observer.schedule(event_handler, watch_folder, recursive=False)

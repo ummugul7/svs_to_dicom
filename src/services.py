@@ -35,7 +35,7 @@ log = logging.getLogger("werkzeug")
 log.setLevel(logging.ERROR)
 
 
-def dicom_process(file_name: str):
+def dicom_process(file_name: str, metadata_hash: str, root_folder: str = "DATA_FOLDER"):
     """Converts an uploaded SVS file to DICOM format and cleans up the original file.
 
     This function retrieves the paths for the source SVS file and the target DICOM folder
@@ -47,7 +47,7 @@ def dicom_process(file_name: str):
         file_name (str): The name of the SVS file to be processed.
     """
     try:
-        svs_path = svs_path_get(file_name)
+        svs_path = svs_path_get(file_name, root_folder)
         output_folder = dicom_folder_get(file_name)
 
         if os.path.exists(output_folder):
@@ -59,18 +59,21 @@ def dicom_process(file_name: str):
             raise Exception("DICOM files could not be created.")
 
         try:
-            delete_svs_folder(file_name)
-            logging.info(f" Original SVS file deleted to save space: '{file_name}'.")
+            delete_svs_folder(file_name, root_folder)
+            if root_folder == "DATA_FOLDER":
+                logging.info(f" Original SVS file deleted to save space: '{file_name}'.")
 
         except Exception as ex:  # noqa: BLE001
             logging.warning(f" Error deleting original file '{file_name}': {ex!s}")
+
+        add_db(file_name, metadata_hash, root_folder)
 
     except Exception as e:  # noqa: BLE001
         logging.error(f" Error processing '{file_name}': {e!s}")
 
 
-def add_db(file_name: str, quickhash: str) -> bool:
-    slide = read_slide(file_name, quickhash)
+def add_db(file_name: str, quickhash: str, root_folder: str = "DATA_FOLDER") -> bool:
+    slide = read_slide(file_name, quickhash, root_folder)
     success = add_slide_db(slide)
     if success:
         logging.info(f"Added new slide. '{file_name}'.")
@@ -115,7 +118,7 @@ def process_svs_folder(files):
     return results
 
 
-def process_files(file_names: list) -> dict:
+def process_files(file_names: list, root_folder: str = "DATA_FOLDER") -> dict:
     """Processes a list of local SVS filenames, avoiding duplicates and triggering DICOM conversion.
 
     This core function acts as the central processor for SVS files already present in the local
@@ -137,22 +140,21 @@ def process_files(file_names: list) -> dict:
     results = {"added": [], "duplicates": [], "skipped": []}
     for file_name in file_names:
         try:
-            metadata_hash = generate_metadata_hash(file_name)
+            metadata_hash = generate_metadata_hash(file_name, root_folder)
         except (SQLAlchemyError, OSError, ValueError) as e:
-            delete_svs_folder(file_name)
+            delete_svs_folder(file_name, root_folder)
             logging.error(f"Error reading '{file_name}': could not open/read the file '{e}'")
             results["skipped"].append({"file_name": file_name})
             continue
 
         existing = check_slide_exists(metadata_hash)
         if existing:
-            delete_svs_folder(file_name)
+            delete_svs_folder(file_name, root_folder)
             logging.info(f"Duplicate file '{file_name}'. Same hash as '{existing.filename}'.")
             results["duplicates"].append({"file_name": file_name, "match_name": existing.filename})
             continue
         try:
-            dicom_executor.submit(dicom_process, file_name)
-            add_db(file_name, metadata_hash)
+            dicom_executor.submit(dicom_process, file_name, metadata_hash, root_folder)
             results["added"].append({"file_name": file_name})
         except Exception as e:  # noqa: BLE001
             logging.error(f"Unexpected error processing '{file_name}': {e}")
