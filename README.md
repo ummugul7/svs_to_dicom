@@ -1,17 +1,24 @@
 # SVS to DICOM Dönüştürücü
-bir klasörde bulunan tüm SVS dosyalrını , DICOM formatına dönüştüren ve zip halinde döndüren bir servis 
-## Neler kullandım 
-postgresql veritabanı, loglama işlemi ve dbnin kullanılması için bir docker compose dosyası eklendi.
+
+proje SVS uzantılı patoloji görüntü dosyalarını DICOM formatına dönüştüren bir web servisi ve arka planda çalışan bir izleyici (observer) içerir. 
+
+Projeye web arayüzü üzerinden veya doğrudan izlenen bir klasör aracılığıyla SVS dosyaları eklenebilir. Yüklenen dosyalar asenkron olarak işlenir, WsiDicomizer kullanılarak DICOM formatına dönüştürülür ve verileri veritabanına kaydedilir. 
+
+## Özellikler
+- **Web Arayüzü**: Dosya yükleme ve durumu görüntüleme.
+- **Klasör İzleyici (Observer)**: Belirli bir klasörü izleyerek içine atılan SVS dosyalarını otomatik olarak işleme.
 
 ## Kütüphaneler 
-ORM için SQLAlchemy
-API servisi için flask
-svs dosyalarını okumak için OpenSlide
-svs dosyasını dicoma çevirmek için  WsiDicomizer
-thread yönetiminin otomatik yapılması için  concurrent.futures
-db için de psycopg2 
-
+- **Flask**: API ve web servisi için
+- **SQLAlchemy**: ORM işlemleri için
+- **psycopg2**: PostgreSQL veritabanı bağlantısı için
+- **OpenSlide**: SVS dosyalarını okumak için
+- **WsiDicomizer**: SVS dosyasını DICOM formatına çevirmek için
+- **concurrent.futures**: Thread yönetiminin otomatik yapılması için
+- **watchdog**: Klasördeki değişiklikleri izlemek (observer) için
 
 ## Kurulum ve Çalıştırma
-- projenin bulunduğu klaörde docker compose up komutu ile veya ide üzerinden containeri ayağa kaldırın,
-- Projeyi ayağa kaldırmak için terminalde `python main.py` komutunu çalıştırın ve http://127.0.0.1:8000/upload ile dosya yükleme işlemine başlayın.
+
+1. Projenin bulunduğu klasörde `docker compose up` komutu ile veya ide üzerinden containerları ayağa kaldırın.
+2. Projeyi (web servisini) ayağa kaldırmak için terminalde `python main.py` komutunu çalıştırın ve `http://127.0.0.1:8000/upload` adresi ile dosya yükleme işlemine başlayın.
+3. İzleyiciyi (Observer) çalıştırmak istiyorsanız yeni bir terminal penceresi açıp `python src/observer.py` komutunu çalıştırın.

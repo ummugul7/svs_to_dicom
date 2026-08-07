@@ -66,3 +66,4 @@ wsidicomizer==0.28.1
 WTForms==3.2.2
 xsdata==26.2
 zarr==3.2.1
+watchdog==4.0.2
